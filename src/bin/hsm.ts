@@ -3,6 +3,7 @@
 import type { Replace } from "@samual/lib"
 import type { Info } from ".."
 import { readFile, writeFile } from "fs/promises"
+import { execSync } from "node:child_process"
 import { homedir as getHomeDirectory } from "os"
 import {
 	basename as getPathBaseName, dirname as getPathDirectory, extname as getPathFileExtension,
@@ -488,6 +489,8 @@ ${chalk.bold(`Warning:`)} ${colourC(`hsm`)} ${colourL(commands[0])} is deprecate
 if (autoExit)
 	process.exit()
 
+const sleep = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms))
+
 function logHelp() {
 	const pushCommandDescription = `Push scripts from a directory to hackmud user's scripts directories`
 	const watchCommandDescription = `Watch a directory and push a script when modified`
@@ -652,7 +655,57 @@ ${colourN(`--help`)}
 	}
 }
 
-function logInfo({ path, users, characterCount, error, warnings }: Info, hackmudPath: string) {
+async function execOnClient(type: string[]) {
+	const last_window = execSync(`kdotool getactivewindow`).toString()
+	const window_id = execSync(`kdotool search "^hackmud$"`).toString()
+
+	execSync(`kdotool windowactivate ${window_id}`)
+
+	/**
+	 * I also installed, but may not explicitly reference:
+	 *  - wlrctl
+	 *  - dotool
+	 *  - xdotool
+	 *  - ydotool
+	 *  - kdotool
+	 *  - wmctrl
+	 */
+
+	// const geo = /Window (?<window_id>\{[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+\})\n {2}Position: (?<posx>[\d.]+),(?<posy>[\d.]+)\n {2}Geometry: (?<geox>[\d.]+)x(?<geoy>[\d.]+)/
+	// const geo_parts = execSync(`kdotool getwindowgeometry ${window_id}`).toString().trim().match(geo)
+	//
+	// if (!geo_parts || !geo_parts.groups)
+	// 	return false
+
+	// const window = geo_parts.groups
+
+	// log(`${window.geox} ${window.geoy}`)
+	// log(`${window.posx} ${window.posy}`)
+
+	// const x = Number(window.posx) || 0
+	// const y = Number(window.posy) || 0
+
+	// execSync(`echo mouseto 0 0 | dotool`)
+	// execSync(`echo mouseto 0 0 | dotool`)
+	// execSync(`echo mousemove ${x * 1.5} ${y * 1.5} | dotool`)
+
+	execSync(`kdotool windowactivate ${window_id}`)
+
+	await sleep(1000)
+
+	for (let i = 0; i < type.length; i++) {
+		const to_type = type[i] as string
+
+		execSync(`echo "type ${to_type}" | dotool`)
+		await sleep(100)
+		execSync(`echo "key k:28" | dotool`)
+		await sleep(100)
+	}
+
+	execSync(`kdotool windowactivate ${last_window}`)
+}
+
+async function logInfo({ path, users, characterCount, error, warnings }: Info, hackmudPath: string) {
 	path = getRelativePath(`.`, path)
 
 	if (error) {
@@ -666,6 +719,16 @@ function logInfo({ path, users, characterCount, error, warnings }: Info, hackmud
 
 	for (const warning of warnings)
 		console.warn(colourF(`${chalk.bold(`Warning:`)} ${warning.message}`))
+
+	const this_user = users.join(``)
+
+	await execOnClient([
+		`+${this_user}`,
+		`user ${this_user}`,
+		`sys.specs`,
+		`accts.balance`,
+		`#u ${getPathBaseName(path, getPathFileExtension(path))}`
+	])
 
 	log(`Pushed ${chalk.bold(path)} to ${users.map(user => chalk.bold(userColours.get(user))).join(`, `)} | ${
 		chalk.bold(String(characterCount))
